@@ -9,7 +9,6 @@ import {
   SubscriptionRef,
   Equal,
   Take,
-  Duration,
   FiberId,
 } from "effect"
 
@@ -55,41 +54,25 @@ export function mkMvuCore<RInit, Model, Msg, RUpdate, RView, RSub>(
         Effect.runSync(Queue.offer(msgQueue, Take.of(msg)))
       }
 
-      yield* _(
-        Effect.forkDaemon(
-          Stream.runFoldEffect(
-            stateRef.changes,
-            // Effect.succeed(constVoid()) as ReleaseSub<RSub>,
-            [
-              Fiber.unit,
-              Stream.empty as Stream.Stream<RSub, never, Msg>,
-            ] as const,
-            ([prevDaemon, prevStream], model) => {
-              // console.log("subscriptions state changed: ", model)
-              const sub = subscriptions(model)
-              console.log({ sub })
-              return Effect.gen(function* (_) {
-                // console.log("one")
-                yield* _(
-                  Stream.runDrain(
-                    Stream.interruptAfter(prevStream, Duration.zero)
-                  )
-                )
-                yield* _(prevDaemon.interruptAsFork(FiberId.none))
-                // console.log("two")
-                // yield* _(release)
-                yield* _(view(model, sendMsg))
-                const fiber = yield* _(
-                  Effect.forkDaemon(Stream.runIntoQueue(sub, msgQueue))
-                )
-                // console.log("three")
-                // const nextRelease = yield* _(sub.acquire(sendMsg))
-                // return nextRelease
-                return [fiber, sub] as const
-              })
-            }
-          )
-        )
+      const processStateChanges = Stream.runFoldEffect(
+        stateRef.changes,
+        Fiber.unit,
+        (prevDaemon, model) => {
+          console.log("state changed: ", model)
+          const sub = subscriptions(model)
+          return Effect.gen(function* (_) {
+            yield* _(prevDaemon.interruptAsFork(FiberId.none))
+
+            yield* _(view(model, sendMsg))
+
+            const fiber = yield* _(
+              Stream.runIntoQueue(sub, msgQueue),
+              Effect.fork
+            )
+
+            return fiber
+          })
+        }
       )
 
       const processCmds = Effect.forever(
@@ -138,7 +121,6 @@ export function mkMvuCore<RInit, Model, Msg, RUpdate, RView, RSub>(
           )
 
           if (!Equal.equals(nextState, state)) {
-            console.log({ state, nextState })
             yield* _(view(nextState, sendMsg))
             yield* _(SubscriptionRef.set(stateRef, nextState))
           }
@@ -147,7 +129,9 @@ export function mkMvuCore<RInit, Model, Msg, RUpdate, RView, RSub>(
       )
 
       yield* _(
-        Effect.all([processCmds, processMsgs], { concurrency: "unbounded" })
+        Effect.all([processStateChanges, processCmds, processMsgs], {
+          concurrency: "unbounded",
+        })
       )
     })
   )

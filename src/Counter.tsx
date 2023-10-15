@@ -51,12 +51,7 @@ export const update = (
     .with({ tag: "Decrement" }, () =>
       Transition({
         nextState: model - 1,
-        cmd: Cmd.cmd([
-          Effect.gen(function* (_) {
-            // yield* _(Console.log("Decremented"))
-            return { tag: "Noop" }
-          }),
-        ]),
+        cmd: Cmd.none,
       })
     )
     .with({ tag: "Noop" }, () =>
@@ -78,10 +73,11 @@ function interval(interval: Duration.DurationInput) {
 export const subscriptions = (
   model: Model
 ): Stream.Stream<never, never, Msg> => {
+  Effect.whenEffect
   return model > 5
     ? pipe(
-        interval(Duration.seconds(1)),
-        Stream.map(() => ({ tag: "Decrement" }))
+        interval(Duration.millis(500)),
+        Stream.map(() => ({ tag: "Increment" }))
       )
     : Stream.identity()
 }

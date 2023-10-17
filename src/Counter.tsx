@@ -3,7 +3,6 @@ import { Effect, Console, Stream, Schedule, Duration, pipe } from "effect"
 import { match } from "ts-pattern"
 import { Transition } from "./Elm/Transition"
 import * as Cmd from "./Elm/Cmd"
-import { Sub } from "./Elm/Sub"
 
 export type Model = number
 

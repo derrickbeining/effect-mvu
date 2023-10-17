@@ -7,7 +7,6 @@ import { Data, Stream } from "effect"
 import { Transition } from "./Elm/Transition"
 import * as Cmd from "./Elm/Cmd"
 import { match } from "ts-pattern"
-import { Sub } from "./Elm/Sub"
 
 export type Msg = Data.TaggedEnum<{
   CounterMsg: Counter.Msg

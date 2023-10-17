@@ -9,7 +9,6 @@ import {
   SubscriptionRef,
   Equal,
   Take,
-  FiberId,
 } from "effect"
 
 import * as Cmd from "./Cmd"
@@ -29,7 +28,6 @@ interface ModelViewUpdateProgram<RInit, Model, Msg, RUpdate, RView, RSub> {
   init: Transition<RInit, Model, Msg>
   update: (model: Model, msg: Msg) => Transition<RUpdate, Model, Msg>
   view: (model: Model, sendMsg: Send<Msg>) => Effect.Effect<RView, never, void>
-  // subscriptions: (model: Model) => Sub<RSub, Msg>
   subscriptions: (model: Model) => Stream.Stream<RSub, never, Msg>
 }
 
@@ -61,7 +59,7 @@ export function mkMvuCore<RInit, Model, Msg, RUpdate, RView, RSub>(
           console.log("state changed: ", model)
           const sub = subscriptions(model)
           return Effect.gen(function* (_) {
-            yield* _(prevDaemon.interruptAsFork(FiberId.none))
+            yield* _(Fiber.interrupt(prevDaemon))
 
             yield* _(view(model, sendMsg))
 
@@ -121,7 +119,6 @@ export function mkMvuCore<RInit, Model, Msg, RUpdate, RView, RSub>(
           )
 
           if (!Equal.equals(nextState, state)) {
-            yield* _(view(nextState, sendMsg))
             yield* _(SubscriptionRef.set(stateRef, nextState))
           }
           yield* _(Queue.offerAll(cmdQueue, cmds))
@@ -158,7 +155,6 @@ interface ModelViewUpdateDomProgram<RInit, Model, Msg, RUpdate, VDom, RSub> {
   init: Transition<RInit, Model, Msg>
   update: (model: Model, msg: Msg) => Transition<RUpdate, Model, Msg>
   view: (model: Model) => View<Msg, VDom>
-  // subscriptions: (model: Model) => Sub<RSub, Msg>
   subscriptions: (model: Model) => Stream.Stream<RSub, never, Msg>
   bootstrap: Effect.Effect<never, never, VDomManager<VDom>>
 }

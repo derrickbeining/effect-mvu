@@ -22,6 +22,10 @@ export function unCmd<R, Msg>(
   return unsafeCoerce(cmd)
 }
 
+export const succeed = <A>(val: A): Cmd<never, A> => {
+  return cmd([Eff.succeed(val)])
+}
+
 export const none: Cmd<never, never> = cmd([])
 
 export function batch<R, Msg>(cmds: ReadonlyArray<Cmd<R, Msg>>): Cmd<R, Msg> {

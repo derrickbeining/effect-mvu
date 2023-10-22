@@ -1,8 +1,9 @@
 import ReactDOM from "react-dom/client"
-import { Effect } from "effect"
+import { Duration, Effect, Stream, pipe } from "effect"
 import * as App from "./App"
 import "./index.css"
 import { mkModelViewUpdateDomProgram } from "./Elm/Program"
+import * as Ports from "./Ports"
 
 const program = mkModelViewUpdateDomProgram({
   init: App.init,
@@ -28,8 +29,29 @@ const program = mkModelViewUpdateDomProgram({
   }),
 })
 
-Effect.runPromise(program)
-  .then((it) => {
-    console.log("app", it)
-  })
-  .catch(console.error)
+const app = Effect.gen(function* (_) {
+  const timeUpdatedPort = yield* _(Ports.TimeUpdatedPort)
+
+  const timeUpdatedProcess = pipe(
+    Stream.tick(Duration.seconds(1)),
+    Stream.runForEach(() => timeUpdatedPort.send(new Date()))
+  )
+
+  const alertProcess = pipe(
+    Ports.alert,
+    Stream.runForEach((message) => Effect.sync(() => alert(message)))
+  )
+
+  yield* _(
+    Effect.all([program, alertProcess, timeUpdatedProcess], {
+      concurrency: "unbounded", // necessary, otherwise defaults to 2
+    })
+  )
+})
+
+app.pipe(
+  Effect.provide(Ports.TimeUpdatedPortLayer),
+  Effect.provide(Ports.AlertPortLayer),
+  Effect.scoped,
+  Effect.runPromise
+)

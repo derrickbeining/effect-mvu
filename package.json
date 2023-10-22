@@ -10,12 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "effect": "github:derrickbeining/effect#build-on-install",
+    "@effect/schema": "^0.45.3",
+    "effect": "^2.0.0-next.49",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "ts-pattern": "^5.0.5"
   },
   "devDependencies": {
+    "@effect/language-service": "^0.0.21",
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
@@ -25,6 +27,7 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.3",
     "typescript": "^5.0.2",
-    "vite": "^4.4.5"
+    "vite": "^4.4.5",
+    "vite-plugin-checker": "^0.6.2"
   }
 }

@@ -36,102 +36,100 @@ export function mkMvuCore<RInit, Model, Msg, RUpdate, RView, RSub>(
 ): Effect.Effect<RInit | RUpdate | RView | RSub, never, void> {
   const { init, update, view, subscriptions } = program
 
-  return Effect.scoped(
-    Effect.gen(function* (_) {
-      const stateRef = yield* _(SubscriptionRef.make(init.nextState))
+  return Effect.gen(function* (_) {
+    const stateRef = yield* _(SubscriptionRef.make(init.nextState))
 
-      const cmdQueue = yield* _(
-        Queue.unbounded<Cmd.Cmd<RInit | RUpdate, Msg>>()
-      )
+    const cmdQueue = yield* _(Queue.unbounded<Cmd.Cmd<RInit | RUpdate, Msg>>())
 
-      yield* _(Queue.offer(cmdQueue, init.cmd))
+    yield* _(Queue.offer(cmdQueue, init.cmd))
 
-      const msgQueue = yield* _(Queue.unbounded<Take.Take<never, Msg>>())
+    const msgQueue = yield* _(Queue.unbounded<Take.Take<never, Msg>>())
 
-      function sendMsg(msg: Msg): void {
-        Effect.runSync(Queue.offer(msgQueue, Take.of(msg)))
+    function sendMsg(msg: Msg): void {
+      Effect.runSync(Queue.offer(msgQueue, Take.of(msg)))
+    }
+
+    const processStateChanges = Stream.runFoldEffect(
+      stateRef.changes,
+      Fiber.unit,
+      (prevDaemon, model) => {
+        // console.log("state changed: ", model)
+        const sub = subscriptions(model)
+        return Effect.gen(function* (_) {
+          yield* _(Fiber.interrupt(prevDaemon))
+
+          yield* _(view(model, sendMsg))
+
+          const fiber = yield* _(
+            Stream.runIntoQueue(sub, msgQueue),
+            Effect.fork
+          )
+
+          return fiber
+        })
       }
+    )
 
-      const processStateChanges = Stream.runFoldEffect(
-        stateRef.changes,
-        Fiber.unit,
-        (prevDaemon, model) => {
-          console.log("state changed: ", model)
-          const sub = subscriptions(model)
-          return Effect.gen(function* (_) {
-            yield* _(Fiber.interrupt(prevDaemon))
-
-            yield* _(view(model, sendMsg))
-
-            const fiber = yield* _(
-              Stream.runIntoQueue(sub, msgQueue),
-              Effect.fork
-            )
-
-            return fiber
-          })
-        }
-      )
-
-      const processCmds = Effect.forever(
-        Effect.gen(function* (_) {
-          const cmds = yield* _(Queue.takeBetween(cmdQueue, 1, Infinity))
-          const effs = Chunk.flatMap(cmds, (it) =>
-            Chunk.fromIterable(Cmd.unCmd(it))
-          )
-          yield* _(
-            Effect.fork(
-              Effect.forEach(
-                effs,
-                Effect.flatMap((msg) => Queue.offer(msgQueue, Take.of(msg))),
-                { concurrency: "unbounded" }
-              )
+    const processCmds = Effect.forever(
+      Effect.gen(function* (_) {
+        const cmds = yield* _(Queue.takeBetween(cmdQueue, 1, Infinity))
+        const effs = Chunk.flatMap(cmds, (it) =>
+          Chunk.fromIterable(Cmd.unCmd(it))
+        )
+        yield* _(
+          Effect.fork(
+            Effect.forEach(
+              effs,
+              Effect.flatMap((msg) => Queue.offer(msgQueue, Take.of(msg))),
+              { concurrency: "unbounded" }
             )
           )
-        })
-      )
+        )
+      })
+    )
 
-      const processMsgs = Effect.forever(
-        Effect.gen(function* (_) {
-          const state = yield* _(SubscriptionRef.get(stateRef))
-          const msgs = yield* _(
-            Queue.takeBetween(msgQueue, 1, Infinity),
-            Effect.map(
-              Chunk.filterMap((it) =>
-                Take.match(it, {
-                  onEnd: () => Option.none(),
-                  onFailure: () => Option.none(),
-                  onSuccess: (msg) => Option.some(msg),
-                })
-              )
-            ),
-            Effect.map(Chunk.flatten)
-          )
+    const processMsgs = Effect.forever(
+      Effect.gen(function* (_) {
+        const state = yield* _(SubscriptionRef.get(stateRef))
+        const msgs = yield* _(
+          Queue.takeBetween(msgQueue, 1, Infinity),
+          Effect.map(
+            Chunk.filterMap((it) =>
+              Take.match(it, {
+                onEnd: () => Option.none(),
+                onFailure: () => Option.none(),
+                onSuccess: (msg) => Option.some(msg),
+              })
+            )
+          ),
+          Effect.map(Chunk.flatten)
+        )
 
-          const [nextState, cmds] = RA.reduce(
-            msgs,
-            [state, Array<Cmd.Cmd<RUpdate, Msg>>()] as const,
-            ([nextState, cmds], msg) => {
-              const transition = update(nextState, msg)
-              cmds.push(transition.cmd)
-              return [transition.nextState, cmds] as const
-            }
-          )
-
-          if (!Equal.equals(nextState, state)) {
-            yield* _(SubscriptionRef.set(stateRef, nextState))
+        const [nextState, cmds] = RA.reduce(
+          msgs,
+          [state, Array<Cmd.Cmd<RUpdate, Msg>>()] as const,
+          ([nextState, cmds], msg) => {
+            const transition = update(nextState, msg)
+            cmds.push(transition.cmd)
+            return [transition.nextState, cmds] as const
           }
-          yield* _(Queue.offerAll(cmdQueue, cmds))
-        })
-      )
+        )
+        console.log(RA.fromIterable(msgs), { state, nextState })
+        if (!Equal.equals(nextState, state)) {
+          yield* _(SubscriptionRef.set(stateRef, nextState))
+        } else {
+          console.log("states are equal; skipping update")
+        }
+        yield* _(Queue.offerAll(cmdQueue, cmds))
+      })
+    )
 
-      yield* _(
-        Effect.all([processStateChanges, processCmds, processMsgs], {
-          concurrency: "unbounded",
-        })
-      )
-    })
-  )
+    yield* _(
+      Effect.all([processStateChanges, processCmds, processMsgs], {
+        concurrency: "unbounded",
+      })
+    )
+  })
 }
 
 export function mkModelViewUpdateProgram<

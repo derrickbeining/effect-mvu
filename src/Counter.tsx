@@ -1,24 +1,22 @@
 import { Send, mkView } from "./Elm/View"
-import { Effect, Console, Stream, Schedule, Duration, pipe } from "effect"
+import { Effect, Console, Stream, Schedule, Duration, pipe, Data } from "effect"
 import { match } from "ts-pattern"
 import { Transition } from "./Elm/Transition"
 import * as Cmd from "./Elm/Cmd"
 
 export type Model = number
 
-export type Msg =
-  | { readonly tag: "Increment" }
-  | { readonly tag: "Decrement" }
-  | { readonly tag: "Noop" }
+export type Msg = Data.TaggedEnum<{
+  Increment: {}
+  Decrement: {}
+  Noop: {}
+}>
+
+const Msg = Data.taggedEnum<Msg>()
 
 export const init: Transition<never, Model, Msg> = Transition({
   nextState: 0,
-  cmd: Cmd.cmd([
-    Effect.gen(function* (_) {
-      yield* _(Console.log("init"))
-      return { tag: "Noop" }
-    }),
-  ]),
+  cmd: Cmd.none,
 })
 
 export const update = (
@@ -26,34 +24,34 @@ export const update = (
   msg: Msg
 ): Transition<never, Model, Msg> => {
   return match<Msg, Transition<never, Model, Msg>>(msg)
-    .with({ tag: "Increment" }, () =>
+    .with({ _tag: "Increment" }, () =>
       Transition({
         nextState: model + 1,
         cmd: Cmd.cmd([
           Effect.gen(function* (_) {
             yield* _(Effect.sleep(`3 seconds`))
             yield* _(Console.log("Incremented", "3s delay"))
-            return { tag: "Noop" }
+            return Msg("Noop")()
           }),
           Effect.gen(function* (_) {
             yield* _(Console.log("Incremented", "no delay"))
-            return { tag: "Noop" }
+            return Msg("Noop")()
           }),
           Effect.gen(function* (_) {
             yield* _(Effect.sleep(`1 seconds`))
             yield* _(Console.log("Incremented", "1s delay"))
-            return { tag: "Noop" }
+            return Msg("Noop")()
           }),
         ]),
       })
     )
-    .with({ tag: "Decrement" }, () =>
+    .with({ _tag: "Decrement" }, () =>
       Transition({
         nextState: model - 1,
         cmd: Cmd.none,
       })
     )
-    .with({ tag: "Noop" }, () =>
+    .with({ _tag: "Noop" }, () =>
       Transition({
         nextState: model,
         cmd: Cmd.none,
@@ -72,11 +70,10 @@ function interval(interval: Duration.DurationInput) {
 export const subscriptions = (
   model: Model
 ): Stream.Stream<never, never, Msg> => {
-  Effect.whenEffect
   return model > 5
     ? pipe(
-        interval(Duration.millis(500)),
-        Stream.map(() => ({ tag: "Increment" }))
+        interval(Duration.millis(1)),
+        Stream.map(() => Msg("Increment")())
       )
     : Stream.identity()
 }
@@ -84,8 +81,8 @@ export const subscriptions = (
 export const view = mkView((send: Send<Msg>, model: Model) => {
   return (
     <div>
-      <button onClick={() => send({ tag: "Increment" })}>Increment</button>
-      <button onClick={() => send({ tag: "Decrement" })}>Decrement</button>
+      <button onClick={() => send(Msg("Increment")())}>Increment</button>
+      <button onClick={() => send(Msg("Decrement")())}>Decrement</button>
       <p>count is {model}</p>
     </div>
   )

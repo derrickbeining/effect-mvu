@@ -12,14 +12,6 @@ export interface Lift<Msg, VDom> {
   ): VDom
 }
 
-// export function lift<Msg, SubMsg, VDom>(
-//   send: Send<Msg>,
-//   lift: (subMsg: SubMsg) => Msg,
-//   html: View<SubMsg, VDom>
-// ): VDom {
-//   return html((subMsg) => send(lift(subMsg)))
-// }
-
 export const lift = dual<
   <Msg, SubMsg, VDom>(
     send: Send<Msg>,
@@ -39,8 +31,7 @@ export interface View<Msg, VDom> {
 }
 
 export interface Render<Msg, Args extends unknown[], VDom> {
-  (send: (msg: Msg) => void, ...args: Args): // liftHtml: Lift<Msg, VDom>
-  VDom
+  (send: (msg: Msg) => void, ...args: Args): VDom
 }
 
 export function mkView<Msg, Args extends unknown[], VDom>(
@@ -48,10 +39,7 @@ export function mkView<Msg, Args extends unknown[], VDom>(
 ): (...args: Args) => View<Msg, VDom> {
   return (...args) =>
     (send) => {
-      return render(
-        send,
-        ...args /* (lift, subView) => subView((subMsg) => send(lift(subMsg))) */
-      )
+      return render(send, ...args)
     }
 }
 

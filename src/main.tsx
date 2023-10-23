@@ -30,20 +30,20 @@ const program = mkModelViewUpdateDomProgram({
 })
 
 const app = Effect.gen(function* (_) {
-  const timeUpdatedPort = yield* _(Ports.TimeUpdatedPort)
+  const timeUpdated = yield* _(Ports.TimeUpdatedPort)
 
-  const timeUpdatedProcess = pipe(
+  const timeUpdatedPort = pipe(
     Stream.tick(Duration.seconds(1)),
-    Stream.runForEach(() => timeUpdatedPort.send(new Date()))
+    Stream.runForEach(() => timeUpdated.send(new Date()))
   )
 
-  const alertProcess = pipe(
+  const alertPort = pipe(
     Ports.alert,
     Stream.runForEach((message) => Effect.sync(() => alert(message)))
   )
 
   yield* _(
-    Effect.all([program, alertProcess, timeUpdatedProcess], {
+    Effect.all([program, alertPort, timeUpdatedPort], {
       concurrency: "unbounded", // necessary, otherwise defaults to 2
     })
   )

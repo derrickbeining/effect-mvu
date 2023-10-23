@@ -3,8 +3,7 @@ import viteLogo from "/vite.svg"
 import "./App.css"
 import * as View from "./Elm/View"
 import * as Counter from "./Counter"
-import { Data, Effect, Stream } from "effect"
-import { Transition } from "./Elm/Transition"
+import { Data, Effect, Stream, Tuple } from "effect"
 import * as Cmd from "./Elm/Cmd"
 import { match } from "ts-pattern"
 import * as Ports from "./Ports"
@@ -21,50 +20,45 @@ export const Msg = Data.taggedEnum<Msg>()
 
 export type Model = { counter: Counter.Model; time: Date }
 
-export const init = Transition<never, Model, Msg>({
-  nextState: { counter: Counter.init.nextState, time: new Date() },
-  cmd: Cmd.batch<never, Msg>([
-    Cmd.map(Counter.init.cmd, (msg) => Msg("CounterMsg")({ msg })),
-  ]),
-})
+export const init: [Model, Cmd.Cmd<never, Msg>] = Tuple.tuple(
+  { counter: Tuple.getFirst(Counter.init), time: new Date() },
+  Cmd.batch([
+    Cmd.map(Tuple.getSecond(Counter.init), (msg) => Msg("CounterMsg")({ msg })),
+  ])
+)
 
 export function update(
   model: Model,
   msg: Msg
-): Transition<Port<"alert", string>, Model, Msg> {
-  return match(msg)
+): [Model, Cmd.Cmd<Port<"alert", string>, Msg>] {
+  return match<Msg, [Model, Cmd.Cmd<Port<"alert", string>, Msg>]>(msg)
     .with({ _tag: "SendAlert" }, ({ message }) => {
-      console.log("send alert")
-      return Transition({
-        nextState: { ...model, time: new Date() },
-        cmd: Cmd.cmd([
+      return Tuple.tuple(
+        model,
+        Cmd.cmd([
           Effect.gen(function* (_) {
             const alert = yield* _(Ports.AlertPort)
             yield* _(alert.send(message))
             return Msg("Noop")()
           }),
-        ]),
-      })
+        ])
+      )
     })
-    .with({ _tag: "CounterMsg" }, (counterMsg) => {
-      const counter = Counter.update(model.counter, counterMsg.msg)
+    .with({ _tag: "CounterMsg" }, ({ msg: counterMsg }) => {
+      const [counterModel, counterCmd] = Counter.update(
+        model.counter,
+        counterMsg
+      )
 
-      return Transition({
-        nextState: { ...model, counter: counter.nextState },
-        cmd: Cmd.batch([
-          Cmd.map(counter.cmd, (msg) => Msg("CounterMsg")({ msg })),
-        ]),
-      })
+      return Tuple.tuple(
+        { ...model, counter: counterModel },
+        Cmd.batch([Cmd.map(counterCmd, (msg) => Msg("CounterMsg")({ msg }))])
+      )
     })
     .with({ _tag: "GotTime" }, ({ time }) => {
-      return Transition({
-        nextState: { ...model, time },
-        cmd: Cmd.none,
-      })
+      return Tuple.tuple({ ...model, time }, Cmd.none)
     })
-    .with({ _tag: "Noop" }, () =>
-      Transition({ nextState: model, cmd: Cmd.none })
-    )
+    .with({ _tag: "Noop" }, () => Tuple.tuple(model, Cmd.none))
     .exhaustive()
 }
 

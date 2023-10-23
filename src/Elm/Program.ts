@@ -13,7 +13,6 @@ import {
 
 import * as Cmd from "./Cmd"
 import { View } from "./View"
-import { Transition } from "./Transition"
 
 interface Send<Msg> {
   (msg: Msg): void
@@ -25,8 +24,8 @@ interface VDomManager<VDom> {
 }
 
 interface ModelViewUpdateProgram<RInit, Model, Msg, RUpdate, RView, RSub> {
-  init: Transition<RInit, Model, Msg>
-  update: (model: Model, msg: Msg) => Transition<RUpdate, Model, Msg>
+  init: [Model, Cmd.Cmd<RInit, Msg>]
+  update: (model: Model, msg: Msg) => [Model, Cmd.Cmd<RUpdate, Msg>]
   view: (model: Model, sendMsg: Send<Msg>) => Effect.Effect<RView, never, void>
   subscriptions: (model: Model) => Stream.Stream<RSub, never, Msg>
 }
@@ -34,14 +33,19 @@ interface ModelViewUpdateProgram<RInit, Model, Msg, RUpdate, RView, RSub> {
 export function mkMvuCore<RInit, Model, Msg, RUpdate, RView, RSub>(
   program: ModelViewUpdateProgram<RInit, Model, Msg, RUpdate, RView, RSub>
 ): Effect.Effect<RInit | RUpdate | RView | RSub, never, void> {
-  const { init, update, view, subscriptions } = program
+  const {
+    init: [initModel, initCmd],
+    update,
+    view,
+    subscriptions,
+  } = program
 
   return Effect.gen(function* (_) {
-    const stateRef = yield* _(SubscriptionRef.make(init.nextState))
+    const stateRef = yield* _(SubscriptionRef.make(initModel))
 
     const cmdQueue = yield* _(Queue.unbounded<Cmd.Cmd<RInit | RUpdate, Msg>>())
 
-    yield* _(Queue.offer(cmdQueue, init.cmd))
+    yield* _(Queue.offer(cmdQueue, initCmd))
 
     const msgQueue = yield* _(Queue.unbounded<Take.Take<never, Msg>>())
 
@@ -108,13 +112,13 @@ export function mkMvuCore<RInit, Model, Msg, RUpdate, RView, RSub>(
         const [nextState, cmds] = RA.reduce(
           msgs,
           [state, Array<Cmd.Cmd<RUpdate, Msg>>()] as const,
-          ([nextState, cmds], msg) => {
-            const transition = update(nextState, msg)
-            cmds.push(transition.cmd)
-            return [transition.nextState, cmds] as const
+          ([prevModel, cmds], msg) => {
+            const [nextModel, cmd] = update(prevModel, msg)
+            cmds.push(cmd)
+            return [nextModel, cmds] as const
           }
         )
-        console.log(RA.fromIterable(msgs), { state, nextState })
+        // console.log(RA.fromIterable(msgs), { state, nextState })
         if (!Equal.equals(nextState, state)) {
           yield* _(SubscriptionRef.set(stateRef, nextState))
         } else {
@@ -150,8 +154,8 @@ export function mkModelViewUpdateProgram<
 }
 
 interface ModelViewUpdateDomProgram<RInit, Model, Msg, RUpdate, VDom, RSub> {
-  init: Transition<RInit, Model, Msg>
-  update: (model: Model, msg: Msg) => Transition<RUpdate, Model, Msg>
+  init: [Model, Cmd.Cmd<RInit, Msg>]
+  update: (model: Model, msg: Msg) => [Model, Cmd.Cmd<RUpdate, Msg>]
   view: (model: Model) => View<Msg, VDom>
   subscriptions: (model: Model) => Stream.Stream<RSub, never, Msg>
   bootstrap: Effect.Effect<never, never, VDomManager<VDom>>

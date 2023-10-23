@@ -1,7 +1,15 @@
 import { Send, mkView } from "./Elm/View"
-import { Effect, Console, Stream, Schedule, Duration, pipe, Data } from "effect"
+import {
+  Effect,
+  Console,
+  Stream,
+  Schedule,
+  Duration,
+  pipe,
+  Data,
+  Tuple,
+} from "effect"
 import { match } from "ts-pattern"
-import { Transition } from "./Elm/Transition"
 import * as Cmd from "./Elm/Cmd"
 
 export type Model = number
@@ -14,20 +22,17 @@ export type Msg = Data.TaggedEnum<{
 
 const Msg = Data.taggedEnum<Msg>()
 
-export const init: Transition<never, Model, Msg> = Transition({
-  nextState: 0,
-  cmd: Cmd.none,
-})
+export const init: [Model, Cmd.Cmd<never, Msg>] = Tuple.tuple(0, Cmd.none)
 
 export const update = (
   model: Model,
   msg: Msg
-): Transition<never, Model, Msg> => {
-  return match<Msg, Transition<never, Model, Msg>>(msg)
+): [Model, Cmd.Cmd<never, Msg>] => {
+  return match<Msg, [Model, Cmd.Cmd<never, Msg>]>(msg)
     .with({ _tag: "Increment" }, () =>
-      Transition({
-        nextState: model + 1,
-        cmd: Cmd.cmd([
+      Tuple.tuple(
+        model + 1,
+        Cmd.cmd([
           Effect.gen(function* (_) {
             yield* _(Effect.sleep(`3 seconds`))
             yield* _(Console.log("Incremented", "3s delay"))
@@ -42,21 +47,11 @@ export const update = (
             yield* _(Console.log("Incremented", "1s delay"))
             return Msg("Noop")()
           }),
-        ]),
-      })
+        ])
+      )
     )
-    .with({ _tag: "Decrement" }, () =>
-      Transition({
-        nextState: model - 1,
-        cmd: Cmd.none,
-      })
-    )
-    .with({ _tag: "Noop" }, () =>
-      Transition({
-        nextState: model,
-        cmd: Cmd.none,
-      })
-    )
+    .with({ _tag: "Decrement" }, () => Tuple.tuple(model - 1, Cmd.none))
+    .with({ _tag: "Noop" }, () => Tuple.tuple(model, Cmd.none))
     .exhaustive()
 }
 

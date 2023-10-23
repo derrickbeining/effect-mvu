@@ -98,7 +98,8 @@ function PortInstance<Name extends string, Payload>(
 }
 
 /**
- * Constructs a port which allows messages to be sent into an MVU app.
+ * Constructs a port through which a stream of messages
+ * can be sent to zero or more subscribers
  *
  */
 export function mkPort<Name extends string, Payload>(
@@ -141,7 +142,6 @@ export function mkPort<Name extends string, Payload>(
     Payload
   >((emit) =>
     Effect.gen(function* (_) {
-      console.log("starting stream")
       const pubSub = yield* _(pubSubService)
       const queue = yield* _(PubSub.subscribe(pubSub))
       yield* _(

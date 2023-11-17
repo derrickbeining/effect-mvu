@@ -8,6 +8,7 @@ import {
   pipe,
   Data,
   Tuple,
+  ReadonlyArray,
 } from "effect"
 import { match } from "ts-pattern"
 import * as Cmd from "./Elm/Cmd"
@@ -50,7 +51,19 @@ export const update = (
         ])
       )
     )
-    .with({ _tag: "Decrement" }, () => Tuple.tuple(model - 1, Cmd.none))
+    .with({ _tag: "Decrement" }, () =>
+      Tuple.tuple(
+        model - 1,
+        Cmd.cmd(
+          pipe(
+            ReadonlyArray.range(1, 1),
+            ReadonlyArray.map(() =>
+              Console.log("decremented").pipe(Effect.map(() => Msg("Noop")()))
+            )
+          )
+        )
+      )
+    )
     .with({ _tag: "Noop" }, () => Tuple.tuple(model, Cmd.none))
     .exhaustive()
 }
@@ -67,7 +80,7 @@ export const subscriptions = (
 ): Stream.Stream<never, never, Msg> => {
   return model > 5
     ? pipe(
-        interval(Duration.millis(1)),
+        interval(Duration.seconds(1)),
         Stream.map(() => Msg("Increment")())
       )
     : Stream.identity()

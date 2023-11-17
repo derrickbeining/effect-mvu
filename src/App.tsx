@@ -38,8 +38,7 @@ export function update(
         Cmd.cmd([
           Effect.gen(function* (_) {
             const alert = yield* _(Ports.AlertPort)
-            yield* _(alert.send(message))
-            return Msg("Noop")()
+            return yield* _(alert.send(message))
           }),
         ])
       )

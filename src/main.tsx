@@ -33,7 +33,7 @@ const app = Effect.gen(function* (_) {
   const timeUpdated = yield* _(Ports.TimeUpdatedPort)
 
   const timeUpdatedPort = pipe(
-    Stream.tick(Duration.seconds(1)),
+    Stream.tick(Duration.days(1)),
     Stream.runForEach(() => timeUpdated.send(new Date()))
   )
 

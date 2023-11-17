@@ -13,6 +13,7 @@ import {
 
 import * as Cmd from "./Cmd"
 import { View } from "./View"
+import { PortMsgSent } from "./Port"
 
 interface Send<Msg> {
   (msg: Msg): void
@@ -77,14 +78,18 @@ export function mkMvuCore<RInit, Model, Msg, RUpdate, RView, RSub>(
     const processCmds = Effect.forever(
       Effect.gen(function* (_) {
         const cmds = yield* _(Queue.takeBetween(cmdQueue, 1, Infinity))
-        const effs = Chunk.flatMap(cmds, (it) =>
-          Chunk.fromIterable(Cmd.unCmd(it))
+        const effs = cmds.pipe(
+          Chunk.flatMap((it) => Chunk.fromIterable(Cmd.unCmd(it)))
         )
         yield* _(
           Effect.fork(
             Effect.forEach(
               effs,
-              Effect.flatMap((msg) => Queue.offer(msgQueue, Take.of(msg))),
+              Effect.flatMap((msg) =>
+                msg === PortMsgSent
+                  ? Effect.succeed(true)
+                  : Queue.offer(msgQueue, Take.of(msg))
+              ),
               { concurrency: "unbounded" }
             )
           )
@@ -119,10 +124,10 @@ export function mkMvuCore<RInit, Model, Msg, RUpdate, RView, RSub>(
           }
         )
         // console.log(RA.fromIterable(msgs), { state, nextState })
-        if (!Equal.equals(nextState, state)) {
-          yield* _(SubscriptionRef.set(stateRef, nextState))
-        } else {
+        if (Equal.equals(nextState, state)) {
           console.log("states are equal; skipping update")
+        } else {
+          yield* _(SubscriptionRef.set(stateRef, nextState))
         }
         yield* _(Queue.offerAll(cmdQueue, cmds))
       })

@@ -14,6 +14,11 @@ import { Simplify } from "effect/Types"
 /**
  * @internal
  */
+export const PortMsgSent: unique symbol = Symbol("PORT_MSG_SENT")
+
+/**
+ * @internal
+ */
 interface PortMsg<Name extends string, Payload>
   extends Data.Data<{ readonly _tag: Name; readonly data: Payload }> {}
 
@@ -28,7 +33,7 @@ export interface PortMsgsPubSub<Name extends string, Payload>
  */
 export interface Port<Name extends string, Payload> {
   readonly name: Name
-  readonly send: (payload: Payload) => Effect.Effect<never, never, void>
+  readonly send: (payload: Payload) => Effect.Effect<never, never, never>
 }
 
 /**
@@ -128,7 +133,7 @@ export function mkPort<Name extends string, Payload>(
           return PubSub.publish(
             pubSub,
             Data.struct({ _tag: name, data: payload })
-          )
+          ).pipe(Effect.map(() => PortMsgSent as never))
         },
       })
     })
